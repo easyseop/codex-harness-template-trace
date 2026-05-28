@@ -1,3 +1,7 @@
+---
+description: Generate layer-aware technical design document from seed spec. USE AFTER /seed and BEFORE /decompose. Maps features to 3-tier architecture, surfaces discussion points before final design.
+---
+
 ## Trace Discipline
 
 - Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
@@ -6,9 +10,7 @@
 - When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
 - If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
 
----
-description: Generate layer-aware technical design document from seed spec. USE AFTER /seed and BEFORE /decompose. Maps features to 3-tier architecture, surfaces discussion points before final design.
----
+
 
 # /trd — Technical Requirements Document (기술 설계서)
 

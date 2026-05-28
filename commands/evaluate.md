@@ -1,3 +1,7 @@
+---
+description: Run 3-stage verification (Mechanical gates → Semantic AC compliance → Judgment quality) after /run. ALWAYS run before committing. Blocks at Stage 1 failures — no Stage 2 until gates pass.
+---
+
 ## Trace Discipline
 
 - Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
@@ -6,9 +10,7 @@
 - When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
 - If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
 
----
-description: Run 3-stage verification (Mechanical gates → Semantic AC compliance → Judgment quality) after /run. ALWAYS run before committing. Blocks at Stage 1 failures — no Stage 2 until gates pass.
----
+
 
 # /evaluate — 3-Stage Verification
 

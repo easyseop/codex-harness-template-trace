@@ -1,3 +1,8 @@
+---
+description: Lightweight mid-run verification. Runs Stage 1 (Mechanical) gates only. Use between AC implementations to catch drift early. Much faster than /evaluate.
+argument-hint: "[optional: specific gate to run, e.g. 'layers' or 'spec']"
+---
+
 ## Trace Discipline
 
 - Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
@@ -6,10 +11,7 @@
 - When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
 - If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
 
----
-description: Lightweight mid-run verification. Runs Stage 1 (Mechanical) gates only. Use between AC implementations to catch drift early. Much faster than /evaluate.
-argument-hint: "[optional: specific gate to run, e.g. 'layers' or 'spec']"
----
+
 
 # /review — 경량 중간 검증
 

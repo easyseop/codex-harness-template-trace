@@ -1,3 +1,7 @@
+---
+description: Evolve the system when /evaluate fails. Runs Wonder → Reflect → Re-seed cycle with fan-out multi-perspective analysis (Contrarian + Simplifier + Researcher). Stops at convergence (ontology similarity ≥ 0.95).
+---
+
 ## Trace Discipline
 
 - Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
@@ -6,9 +10,7 @@
 - When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
 - If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
 
----
-description: Evolve the system when /evaluate fails. Runs Wonder → Reflect → Re-seed cycle with fan-out multi-perspective analysis (Contrarian + Simplifier + Researcher). Stops at convergence (ontology similarity ≥ 0.95).
----
+
 
 # /evolve — Evolution Loop
 

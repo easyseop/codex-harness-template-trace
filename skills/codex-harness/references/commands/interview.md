@@ -1,3 +1,8 @@
+---
+description: START HERE for ANY new feature or unclear requirement. Socratic interview that surfaces hidden assumptions before a single line of code is written. Measures 4D ambiguity score — blocks progress until score ≤ 0.2.
+argument-hint: [topic or feature description]
+---
+
 ## Trace Discipline
 
 - Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
@@ -6,10 +11,7 @@
 - When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
 - If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
 
----
-description: START HERE for ANY new feature or unclear requirement. Socratic interview that surfaces hidden assumptions before a single line of code is written. Measures 4D ambiguity score — blocks progress until score ≤ 0.2.
-argument-hint: [topic or feature description]
----
+
 
 # /interview — Socratic Interview
 

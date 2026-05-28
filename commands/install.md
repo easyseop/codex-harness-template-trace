@@ -1,3 +1,8 @@
+---
+description: Interactive installation wizard for AI Harness Template. Guides through version, track, permissions, gates, and more via step-by-step questions.
+argument-hint: [target-project-path]
+---
+
 ## Trace Discipline
 
 - Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
@@ -6,10 +11,7 @@
 - When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
 - If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
 
----
-description: Interactive installation wizard for AI Harness Template. Guides through version, track, permissions, gates, and more via step-by-step questions.
-argument-hint: [target-project-path]
----
+
 
 # /install — 설치 마법사
 

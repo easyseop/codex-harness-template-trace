@@ -1,3 +1,8 @@
+---
+description: fixture 기반으로 Ouroboros workflow 한 단계를 replay하고 하네스 추적, 명세 근거, output 기대값을 검증한다. 테스트 전용 명령이며 실제 개발 산출물을 만들지 않는다.
+argument-hint: "<target_step> <case> | YAML block with target_step and case"
+---
+
 ## Trace Discipline
 
 - Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
@@ -6,10 +11,7 @@
 - When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
 - If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
 
----
-description: fixture 기반으로 Ouroboros workflow 한 단계를 replay하고 하네스 추적, 명세 근거, output 기대값을 검증한다. 테스트 전용 명령이며 실제 개발 산출물을 만들지 않는다.
-argument-hint: "<target_step> <case> | YAML block with target_step and case"
----
+
 
 # /replay-test — 단계 Replay Test
 

@@ -1,3 +1,7 @@
+---
+description: Methodology plugin manager. List, activate, compose, deactivate development methodologies (Ouroboros, Living Spec, Parallel Change, BMAD-lite, Exploration). Harness gates remain enforced regardless of methodology.
+---
+
 ## Trace Discipline
 
 - Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
@@ -6,9 +10,7 @@
 - When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
 - If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
 
----
-description: Methodology plugin manager. List, activate, compose, deactivate development methodologies (Ouroboros, Living Spec, Parallel Change, BMAD-lite, Exploration). Harness gates remain enforced regardless of methodology.
----
+
 
 # /methodology — Methodology Plugin Manager
 
