@@ -1,3 +1,11 @@
+## Trace Discipline
+
+- Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
+- Never let trace bookkeeping replace the primary behavior of the current command or persona.
+- Ask the required interview questions, produce the required seed/TRD/tasks/code/evaluation, and use trace as supporting evidence while doing that work.
+- When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
+- If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
+
 ---
 name: test-designer
 description: USE THIS for independent test case generation during /run (PAIR_MODE). Designs tests from AC and seed spec only — never reads implementation code. Prevents biased testing. Based on AgentCoder (2024) test separation methodology. In Codex, use worktree isolation when available or a strict sequential persona fallback that only sees seed spec and AC content.

@@ -1,3 +1,11 @@
+## Trace Discipline
+
+- Trace is evidence bookkeeping only. It records which command references, persona references, specs, docs, and source files informed the work.
+- Never let trace bookkeeping replace the primary behavior of the current command or persona.
+- Ask the required interview questions, produce the required seed/TRD/tasks/code/evaluation, and use trace as supporting evidence while doing that work.
+- When practical, mark loaded files with `.harness/trace/mark-loaded-file.sh --path "<file>"`, but do not stall or loop on trace setup before serving the user.
+- If trace tooling is unavailable, continue the command and explicitly mention the trace limitation in the final output.
+
 ---
 description: Execute seed spec via Double Diamond (Discover → Define → Design → Deliver). USE AFTER /decompose. Enforces D→L→P implementation order, writes tests immediately, runs gates continuously. Supports Pair Mode for medium/high complexity ACs.
 ---
