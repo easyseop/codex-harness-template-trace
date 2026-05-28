@@ -4,24 +4,67 @@
 # Usage:
 #   harness list
 #   harness interview "feature idea"
-#   harness run
-#   harness evaluate
+#   harness --exec run
+#   harness --print evaluate
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+find_harness_root() {
+  local dir
+  dir="$(pwd)"
+
+  while [ "$dir" != "/" ]; do
+    if [ -d "$dir/.harness/codex-harness/commands" ] || [ -d "$dir/commands" ]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    if [ -f "$dir/AGENTS.md" ] && [ -d "$dir/.harness" ]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+
+  pwd
+}
+
+ROOT="$(find_harness_root)"
 HARNESS_DIR="$ROOT/.harness"
-CODEX_HARNESS_DIR="$HARNESS_DIR/codex-harness"
-COMMAND_DIR="$CODEX_HARNESS_DIR/commands"
+
+if [ -d "$HARNESS_DIR/codex-harness/commands" ]; then
+  CODEX_HARNESS_DIR="$HARNESS_DIR/codex-harness"
+  COMMAND_DIR="$CODEX_HARNESS_DIR/commands"
+  AGENT_DIR="$CODEX_HARNESS_DIR/agents"
+elif [ -d "$ROOT/commands" ]; then
+  CODEX_HARNESS_DIR="$ROOT"
+  COMMAND_DIR="$ROOT/commands"
+  AGENT_DIR="$ROOT/agents"
+else
+  CODEX_HARNESS_DIR="$HARNESS_DIR/codex-harness"
+  COMMAND_DIR="$CODEX_HARNESS_DIR/commands"
+  AGENT_DIR="$CODEX_HARNESS_DIR/agents"
+fi
+
+MODE="interactive"
+MODEL="${HARNESS_MODEL:-}"
+SANDBOX="${HARNESS_SANDBOX:-workspace-write}"
 
 usage() {
   cat <<'EOF'
 Codex Harness
 
 Usage:
-  harness list
-  harness <step> [request]
-  harness path <step>
+  harness [options] list
+  harness [options] <step> [request]
+  harness [options] path <step>
+
+Options:
+  --exec              Run with `codex exec` non-interactively.
+  --interactive      Open the Codex interactive TUI. This is the default.
+  --print            Print the prepared prompt only.
+  --model <model>    Pass a model to Codex. Also supports HARNESS_MODEL.
+  --sandbox <mode>   Pass a sandbox mode to Codex. Default: workspace-write.
+  -h, --help         Show this help.
 
 Steps:
   interview, seed, trd, decompose, run, evaluate, evolve,
@@ -29,12 +72,11 @@ Steps:
 
 Examples:
   harness interview "Add team billing"
-  harness seed
-  harness run
-  harness evaluate
+  harness --exec seed
+  harness --print run
 
-This wrapper prepares a Codex-ready prompt from the installed command reference.
-Run it in Warp or any terminal, then send the printed prompt to Codex.
+This wrapper works in Warp, VSCode terminals, and plain shells. It uses the
+local Codex CLI login/session; it does not require a separate OpenAI API key.
 EOF
 }
 
@@ -52,8 +94,153 @@ list_steps() {
   find "$COMMAND_DIR" -maxdepth 1 -type f -name '*.md' -exec basename {} .md \; | sort
 }
 
+persona_paths_for_step() {
+  local step="$1"
+  case "$step" in
+    interview) echo "interviewer" ;;
+    seed) echo "ontologist seed-architect" ;;
+    trd) echo "architect" ;;
+    decompose) echo "navigator architect" ;;
+    run) echo "navigator test-designer evaluator" ;;
+    evaluate) echo "evaluator" ;;
+    evolve) echo "contrarian simplifier researcher" ;;
+    review) echo "evaluator hacker" ;;
+    unstuck) echo "navigator contrarian simplifier" ;;
+    pm) echo "navigator" ;;
+    *) echo "" ;;
+  esac
+}
+
+find_codex() {
+  if [ -n "${HARNESS_CODEX_BIN:-}" ]; then
+    printf '%s\n' "$HARNESS_CODEX_BIN"
+    return 0
+  fi
+
+  if command -v codex >/dev/null 2>&1; then
+    command -v codex
+    return 0
+  fi
+
+  return 1
+}
+
+run_codex() {
+  local codex_bin codex_dir
+
+  if ! codex_bin="$(find_codex)"; then
+    echo "Codex CLI was not found." >&2
+    echo "Install/login with Codex first, or use --print and paste the prompt manually." >&2
+    exit 127
+  fi
+
+  codex_dir="$(cd "$(dirname "$codex_bin")" && pwd)"
+
+  # When Codex is installed through nvm, the codex launcher uses
+  # /usr/bin/env node. Put the colocated node first so broken system Node
+  # installs do not hijack the launcher.
+  PATH="$codex_dir:$PATH" "$codex_bin" "$@"
+}
+
+build_prompt() {
+  local step="$1"
+  local request="$2"
+  local command_file="$3"
+  local personas persona persona_file
+
+  personas="$(persona_paths_for_step "$step")"
+
+  cat <<EOF
+Use the Codex Harness step "$step".
+
+Working root:
+$ROOT
+
+Command reference:
+$command_file
+
+User request:
+${request:-"(no extra request text)"}
+
+Before doing the step body:
+1. Read AGENTS.md when present.
+2. Read ARCHITECTURE_INVARIANTS.md when present.
+3. Read and follow the command reference above.
+4. Preserve the Ouroboros workflow, Rule ID evidence, and [하네스 추적] output.
+5. If trace tools exist, mark loaded files with:
+   .harness/trace/mark-loaded-file.sh --path "<file>"
+EOF
+
+  if [ -n "$personas" ] && [ -d "$AGENT_DIR" ]; then
+    echo
+    echo "Persona references to apply when relevant:"
+    for persona in $personas; do
+      persona_file="$AGENT_DIR/$persona.md"
+      if [ -f "$persona_file" ]; then
+        echo "- $persona_file"
+      fi
+    done
+  fi
+
+  cat <<EOF
+
+Now execute the "$step" step.
+EOF
+}
+
+CODEX_ARGS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --exec)
+      MODE="exec"
+      shift
+      ;;
+    --interactive)
+      MODE="interactive"
+      shift
+      ;;
+    --print|--dry-run)
+      MODE="print"
+      shift
+      ;;
+    --model|-m)
+      if [ $# -lt 2 ]; then
+        echo "Missing value for $1" >&2
+        exit 2
+      fi
+      MODEL="$2"
+      shift 2
+      ;;
+    --sandbox|-s)
+      if [ $# -lt 2 ]; then
+        echo "Missing value for $1" >&2
+        exit 2
+      fi
+      SANDBOX="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
 step="${1:-}"
-if [ -z "$step" ] || [ "$step" = "-h" ] || [ "$step" = "--help" ]; then
+if [ -z "$step" ]; then
   usage
   exit 0
 fi
@@ -93,20 +280,27 @@ if [ -x "$HARNESS_DIR/trace/record-runtime-trace.sh" ]; then
     --summary "${request:-no request text}" >/dev/null || true
 fi
 
-cat <<EOF
-Use the Codex Harness step "$step".
+prompt="$(build_prompt "$step" "$request" "$command_file")"
 
-Read and follow this command reference:
-$command_file
+if [ "$MODE" = "print" ]; then
+  printf '%s\n' "$prompt"
+  exit 0
+fi
 
-User request:
-${request:-"(no extra request text)"}
+CODEX_ARGS=(-C "$ROOT" -s "$SANDBOX")
+if [ -n "$MODEL" ]; then
+  CODEX_ARGS=(-m "$MODEL" "${CODEX_ARGS[@]}")
+fi
 
-Before doing the step body:
-1. Read AGENTS.md and ARCHITECTURE_INVARIANTS.md when present.
-2. If trace tools exist, mark loaded files with:
-   .harness/trace/mark-loaded-file.sh --path "<file>"
-3. Preserve the Ouroboros workflow, Rule ID evidence, and [하네스 추적] output.
-
-Now execute the "$step" step.
-EOF
+case "$MODE" in
+  exec)
+    printf '%s\n' "$prompt" | run_codex exec "${CODEX_ARGS[@]}" -
+    ;;
+  interactive)
+    run_codex "${CODEX_ARGS[@]}" "$prompt"
+    ;;
+  *)
+    echo "Unknown harness mode: $MODE" >&2
+    exit 2
+    ;;
+esac
