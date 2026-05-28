@@ -147,8 +147,20 @@ build_prompt() {
   local request="$2"
   local command_file="$3"
   local personas persona persona_file
+  local step_instruction
 
   personas="$(persona_paths_for_step "$step")"
+  case "$step" in
+    interview)
+      step_instruction="Start by asking the next single most important clarification question. Do not spend the first turn on trace bookkeeping. Keep asking follow-up questions until the requirement is clear enough to produce the interview artifact and ambiguity summary."
+      ;;
+    seed)
+      step_instruction="Create or update the seed artifact from the completed interview context. If critical interview context is missing, ask for it before writing the seed."
+      ;;
+    *)
+      step_instruction="Execute the command reference. Ask a clarifying question first when required context is missing."
+      ;;
+  esac
 
   cat <<EOF
 Use the Codex Harness step "$step".
@@ -162,13 +174,15 @@ $command_file
 User request:
 ${request:-"(no extra request text)"}
 
-Before doing the step body:
+Primary behavior:
+$step_instruction
+
+Operating rules:
 1. Read AGENTS.md when present.
 2. Read ARCHITECTURE_INVARIANTS.md when present.
 3. Read and follow the command reference above.
 4. Preserve the Ouroboros workflow, Rule ID evidence, and [하네스 추적] output.
-5. If trace tools exist, mark loaded files with:
-   .harness/trace/mark-loaded-file.sh --path "<file>"
+5. Trace is bookkeeping only. If trace tools exist, mark loaded files when practical, but never let trace work replace the user-facing step behavior.
 EOF
 
   if [ -n "$personas" ] && [ -d "$AGENT_DIR" ]; then
