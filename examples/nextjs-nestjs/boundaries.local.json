@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(DROP DATABASE:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)"
+    ],
+    "allow": [
+      "Read", "Glob", "Grep",
+      "Bash(git:*)",
+      "Bash(pnpm:*)", "Bash(npx:*)",
+      "Bash(docker compose:*)", "Bash(docker ps:*)", "Bash(docker logs:*)",
+      "Bash(npx prisma:*)"
+    ]
+  },
+  "hooks": {}
+}

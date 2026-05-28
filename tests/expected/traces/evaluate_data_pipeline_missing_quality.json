@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-05-19T00:00:00Z",
+  "workflow_step": "evaluate",
+  "request_type": "verification",
+  "selected_command_files": ["commands/evaluate.md"],
+  "selected_reference_files": ["tests/fixtures/run_outputs/data_pipeline_missing_quality.md"],
+  "selected_agent_files": ["agents/evaluator.md"],
+  "loaded_rule_ids": ["RULE-EVAL-001", "RULE-DP-003"],
+  "rule_source_paths": ["commands/evaluate.md"],
+  "trace_id": "trace-replay-evaluate-data-pipeline-missing-quality",
+  "user_request_summary": "Replay evaluate for missing quality validation"
+}

@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# Codex Harness terminal wrapper.
+#
+# Usage:
+#   harness list
+#   harness interview "feature idea"
+#   harness run
+#   harness evaluate
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+HARNESS_DIR="$ROOT/.harness"
+CODEX_HARNESS_DIR="$HARNESS_DIR/codex-harness"
+COMMAND_DIR="$CODEX_HARNESS_DIR/commands"
+
+usage() {
+  cat <<'EOF'
+Codex Harness
+
+Usage:
+  harness list
+  harness <step> [request]
+  harness path <step>
+
+Steps:
+  interview, seed, trd, decompose, run, evaluate, evolve,
+  rollback, unstuck, pm, review, methodology, replay-test
+
+Examples:
+  harness interview "Add team billing"
+  harness seed
+  harness run
+  harness evaluate
+
+This wrapper prepares a Codex-ready prompt from the installed command reference.
+Run it in Warp or any terminal, then send the printed prompt to Codex.
+EOF
+}
+
+normalize_step() {
+  local step="${1:-}"
+  step="${step#/}"
+  printf '%s' "$step"
+}
+
+list_steps() {
+  if [ ! -d "$COMMAND_DIR" ]; then
+    echo "No installed command references found at $COMMAND_DIR" >&2
+    exit 1
+  fi
+  find "$COMMAND_DIR" -maxdepth 1 -type f -name '*.md' -exec basename {} .md \; | sort
+}
+
+step="${1:-}"
+if [ -z "$step" ] || [ "$step" = "-h" ] || [ "$step" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+case "$step" in
+  list)
+    list_steps
+    exit 0
+    ;;
+  path)
+    target="$(normalize_step "${2:-}")"
+    if [ -z "$target" ]; then
+      echo "Usage: harness path <step>" >&2
+      exit 1
+    fi
+    echo "$COMMAND_DIR/$target.md"
+    exit 0
+    ;;
+esac
+
+step="$(normalize_step "$step")"
+shift || true
+request="$*"
+command_file="$COMMAND_DIR/$step.md"
+
+if [ ! -f "$command_file" ]; then
+  echo "Unknown harness step: $step" >&2
+  echo "Available steps:" >&2
+  list_steps >&2
+  exit 1
+fi
+
+if [ -x "$HARNESS_DIR/trace/record-runtime-trace.sh" ]; then
+  "$HARNESS_DIR/trace/record-runtime-trace.sh" \
+    --step "$step" \
+    --request-type "terminal-wrapper" \
+    --summary "${request:-no request text}" >/dev/null || true
+fi
+
+cat <<EOF
+Use the Codex Harness step "$step".
+
+Read and follow this command reference:
+$command_file
+
+User request:
+${request:-"(no extra request text)"}
+
+Before doing the step body:
+1. Read AGENTS.md and ARCHITECTURE_INVARIANTS.md when present.
+2. If trace tools exist, mark loaded files with:
+   .harness/trace/mark-loaded-file.sh --path "<file>"
+3. Preserve the Ouroboros workflow, Rule ID evidence, and [하네스 추적] output.
+
+Now execute the "$step" step.
+EOF

@@ -1,0 +1,6 @@
+runs/
+latest/
+
+# Baselines are intentional review artifacts. Commit them only when promoted.
+!baseline/
+!baseline/**/

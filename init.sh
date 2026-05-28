@@ -1,0 +1,749 @@
+#!/usr/bin/env bash
+# AI Harness Installer
+# Usage: ./init.sh [target-project-path] [options]
+# Options:
+#   --yes, -y                Skip all confirmations (use defaults)
+#   --preset PRESET          Permission preset: strict | standard | permissive (default: standard)
+#   --name NAME              Project name (default: target dirname)
+#   --version VERSION        stable | experimental (default: stable)
+#   --pair-mode MODE         auto | on | off (default: off). Only with --version experimental
+#   --gates GATES            Comma-separated: default, +complexity, +performance, +ai-antipatterns, +security-ai
+#   --methodology LIST       all | none | comma-separated names (e.g. ouroboros,bdd,ddd-lite)
+#   --no-hooks               Skip pre-commit hook installation
+#   --no-ci                  Skip GitHub Actions workflow
+#   --stack STACK             auto | nextjs-django | nextjs-fastapi | nextjs-nestjs | python | nodejs
+# Detects tech stack, generates AGENTS.md, installs gates & boundaries.
+
+set -euo pipefail
+
+HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$HARNESS_DIR/lib/colors.sh"
+
+# Parse args
+TARGET="."
+AUTO_YES=0
+PRESET=""
+CUSTOM_PROJECT_NAME=""
+VERSION="stable"
+PAIR_MODE="off"
+EXTRA_GATES=""
+METHODOLOGY_ARG=""
+SKIP_HOOKS=0
+SKIP_CI=0
+STACK_MODE="auto"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --yes|-y) AUTO_YES=1; shift ;;
+    --preset) PRESET="$2"; shift 2 ;;
+    --name) CUSTOM_PROJECT_NAME="$2"; shift 2 ;;
+    --version) VERSION="$2"; shift 2 ;;
+    --pair-mode) PAIR_MODE="$2"; shift 2 ;;
+    --gates) EXTRA_GATES="$2"; shift 2 ;;
+    --methodology) METHODOLOGY_ARG="$2"; shift 2 ;;
+    --no-hooks) SKIP_HOOKS=1; shift ;;
+    --no-ci) SKIP_CI=1; shift ;;
+    --stack) STACK_MODE="$2"; shift 2 ;;
+    -*) error "Unknown option: $1"; exit 1 ;;
+    *) TARGET="$1"; shift ;;
+  esac
+done
+
+# Validate version
+case "$VERSION" in
+  stable|experimental) ;;
+  *) error "Invalid version: $VERSION (must be stable|experimental)"; exit 1 ;;
+esac
+
+# Validate pair-mode
+case "$PAIR_MODE" in
+  auto|on|off) ;;
+  *) error "Invalid pair-mode: $PAIR_MODE (must be auto|on|off)"; exit 1 ;;
+esac
+
+# Pair mode requires experimental
+if [ "$PAIR_MODE" != "off" ] && [ "$VERSION" = "stable" ]; then
+  error "Pair Mode requires --version experimental."
+  error "Use: --version experimental --pair-mode $PAIR_MODE"
+  exit 1
+fi
+
+# ─── Preflight checks ───────────────────────────────────────────────
+if [ ! -d "$TARGET" ]; then
+  error "Target directory does not exist: $TARGET"
+  exit 1
+fi
+
+TARGET="$(cd "$TARGET" && pwd)"
+
+if [ ! -w "$TARGET" ]; then
+  error "Target directory is not writable: $TARGET"
+  exit 1
+fi
+
+# Verify harness source files are intact
+for required in "lib/detect-stack.sh" "lib/render-template.sh" "templates/AGENTS.md.hbs" "templates/architecture-invariants.md.hbs"; do
+  if [ ! -f "$HARNESS_DIR/$required" ]; then
+    error "Missing required file: $HARNESS_DIR/$required"
+    error "Harness installation may be corrupted. Re-clone the repository."
+    exit 1
+  fi
+done
+
+header "AI Harness Installer"
+info "Target project: $TARGET"
+echo ""
+
+# ─── Step 1: Detect stack ───────────────────────────────────────────
+header "Step 1: Detecting tech stack"
+
+STACK_JSON="$("$HARNESS_DIR/lib/detect-stack.sh" "$TARGET")" || {
+  error "Stack detection failed."
+  exit 1
+}
+
+# Robust JSON parsing: flatten to single line, then extract fields
+STACK_JSON_FLAT=$(echo "$STACK_JSON" | tr -d '\n' | tr -s ' ')
+STACKS=$(echo "$STACK_JSON_FLAT" | sed 's/.*"stacks"[[:space:]]*:[[:space:]]*\[//;s/\].*//' | tr -d '"' | tr ',' '\n' | tr -d ' ')
+PKG_MANAGER=$(echo "$STACK_JSON_FLAT" | sed 's/.*"package_manager"[[:space:]]*:[[:space:]]*"//;s/".*//')
+FRONTEND_DIR=$(echo "$STACK_JSON_FLAT" | sed 's/.*"frontend_dir"[[:space:]]*:[[:space:]]*"//;s/".*//')
+BACKEND_DIR=$(echo "$STACK_JSON_FLAT" | sed 's/.*"backend_dir"[[:space:]]*:[[:space:]]*"//;s/".*//')
+
+echo "$STACK_JSON" | sed 's/^/  /'
+echo ""
+
+STACKS_COMMA=$(echo "$STACKS" | tr '\n' ',' | sed 's/,$//')
+
+info "Detected stacks: ${BOLD}${STACKS_COMMA}${NC}"
+info "Package manager: ${BOLD}${PKG_MANAGER}${NC}"
+echo ""
+
+if [ "$AUTO_YES" -eq 0 ]; then
+  read -p "Continue with these settings? [Y/n] " -n 1 -r CONFIRM
+  echo ""
+  if [[ "$CONFIRM" =~ ^[Nn]$ ]]; then
+    warn "Aborted by user."
+    exit 0
+  fi
+fi
+
+# ─── Step 2: Permission preset ─────────────────────────────────────
+header "Step 2: Codex permission preset"
+if [ -z "$PRESET" ]; then
+  if [ "$AUTO_YES" -eq 1 ]; then
+    PRESET="standard"
+  else
+    echo "  1) strict      - Production/client projects (most restrictive)"
+    echo "  2) standard    - Regular development (recommended)"
+    echo "  3) permissive  - Prototyping (minimal restrictions)"
+    echo ""
+    read -p "Select preset [1-3, default=2]: " -n 1 -r PRESET_CHOICE
+    echo ""
+    case "${PRESET_CHOICE:-2}" in
+      1) PRESET="strict" ;;
+      3) PRESET="permissive" ;;
+      *) PRESET="standard" ;;
+    esac
+  fi
+fi
+
+# Validate preset value
+case "$PRESET" in
+  strict|standard|permissive) ;;
+  *) error "Invalid preset: $PRESET (must be strict|standard|permissive)"; exit 1 ;;
+esac
+
+success "Preset: $PRESET"
+
+# ─── Step 3: Project name ──────────────────────────────────────────
+header "Step 3: Project name"
+PROJECT_NAME="${CUSTOM_PROJECT_NAME:-$(basename "$TARGET")}"
+if [ -z "$CUSTOM_PROJECT_NAME" ] && [ "$AUTO_YES" -eq 0 ]; then
+  read -p "Project name [$PROJECT_NAME]: " -r INPUT_NAME
+  PROJECT_NAME="${INPUT_NAME:-$PROJECT_NAME}"
+fi
+success "Project name: $PROJECT_NAME"
+
+# ─── Step 4: Generate AGENTS.md ────────────────────────────────────
+header "Step 4: Generating AGENTS.md"
+
+# Determine which stack sections to include
+HAS_NEXTJS=""; HAS_NESTJS=""; HAS_FASTAPI=""; HAS_DJANGO=""; HAS_PYTHON=""; HAS_TYPESCRIPT=""
+HAS_PRISMA=""; HAS_ALEMBIC=""; HAS_DOCKER=""; HAS_MONOREPO=""
+
+for stack in $STACKS; do
+  case "$stack" in
+    nextjs)     HAS_NEXTJS="true" ;;
+    nestjs)     HAS_NESTJS="true" ;;
+    fastapi)    HAS_FASTAPI="true" ;;
+    django)     HAS_DJANGO="true" ;;
+    python)     HAS_PYTHON="true" ;;
+    typescript) HAS_TYPESCRIPT="true" ;;
+    prisma)     HAS_PRISMA="true" ;;
+    alembic)    HAS_ALEMBIC="true" ;;
+    docker)     HAS_DOCKER="true" ;;
+    monorepo|turborepo) HAS_MONOREPO="true" ;;
+  esac
+done
+
+if ! "$HARNESS_DIR/lib/render-template.sh" "$HARNESS_DIR/templates/AGENTS.md.hbs" \
+  "PROJECT_NAME=$PROJECT_NAME" \
+  "STACKS=$STACKS_COMMA" \
+  "FRONTEND_DIR=$FRONTEND_DIR" \
+  "BACKEND_DIR=$BACKEND_DIR" \
+  "PKG_MANAGER=$PKG_MANAGER" \
+  "HAS_NEXTJS=$HAS_NEXTJS" \
+  "HAS_NESTJS=$HAS_NESTJS" \
+  "HAS_FASTAPI=$HAS_FASTAPI" \
+  "HAS_DJANGO=$HAS_DJANGO" \
+  "HAS_PYTHON=$HAS_PYTHON" \
+  "HAS_TYPESCRIPT=$HAS_TYPESCRIPT" \
+  "HAS_PRISMA=$HAS_PRISMA" \
+  "HAS_ALEMBIC=$HAS_ALEMBIC" \
+  "HAS_DOCKER=$HAS_DOCKER" \
+  "HAS_MONOREPO=$HAS_MONOREPO" \
+  > "$TARGET/AGENTS.md"; then
+  error "Failed to generate AGENTS.md. Check template and render-template.sh."
+  exit 1
+fi
+
+success "Generated AGENTS.md"
+
+# ─── Step 5: Generate Architecture Invariants ──────────────────────
+header "Step 5: Generating ARCHITECTURE_INVARIANTS.md"
+
+if ! "$HARNESS_DIR/lib/render-template.sh" "$HARNESS_DIR/templates/architecture-invariants.md.hbs" \
+  "PROJECT_NAME=$PROJECT_NAME" \
+  "STACKS=$STACKS_COMMA" \
+  "HAS_NEXTJS=$HAS_NEXTJS" \
+  "HAS_NESTJS=$HAS_NESTJS" \
+  "HAS_FASTAPI=$HAS_FASTAPI" \
+  "HAS_DJANGO=$HAS_DJANGO" \
+  "HAS_PRISMA=$HAS_PRISMA" \
+  "HAS_ALEMBIC=$HAS_ALEMBIC" \
+  "HAS_DOCKER=$HAS_DOCKER" \
+  > "$TARGET/ARCHITECTURE_INVARIANTS.md"; then
+  error "Failed to generate ARCHITECTURE_INVARIANTS.md."
+  exit 1
+fi
+
+success "Generated ARCHITECTURE_INVARIANTS.md"
+
+# ─── Step 6: Copy reference docs ──────────────────────────────────
+header "Step 6: Setting up reference documents"
+
+mkdir -p "$TARGET/docs"
+
+if [ ! -f "$TARGET/docs/code-convention.yaml" ]; then
+  cp "$HARNESS_DIR/templates/code-convention.yaml" "$TARGET/docs/code-convention.yaml"
+  success "Created docs/code-convention.yaml"
+else
+  warn "docs/code-convention.yaml already exists, skipping"
+fi
+
+if [ ! -f "$TARGET/docs/adr.yaml" ]; then
+  cp "$HARNESS_DIR/templates/adr.yaml" "$TARGET/docs/adr.yaml"
+  success "Created docs/adr.yaml"
+else
+  warn "docs/adr.yaml already exists, skipping"
+fi
+
+# ─── Step 7: Install Codex harness settings ───────────────────────
+header "Step 7: Configuring Codex harness boundaries"
+
+mkdir -p "$TARGET/.harness/codex-harness"
+
+if [ ! -f "$TARGET/.harness/codex-harness/boundaries.local.json" ]; then
+  cp "$HARNESS_DIR/boundaries/presets/$PRESET.json" "$TARGET/.harness/codex-harness/boundaries.local.json"
+  success "Installed boundaries.local.json (preset: $PRESET)"
+else
+  warn ".harness/codex-harness/boundaries.local.json already exists"
+  if [ "$AUTO_YES" -eq 1 ]; then
+    info "Kept existing settings (--yes mode)"
+  else
+    read -p "  Overwrite with $PRESET preset? [y/N] " -n 1 -r OVERWRITE
+    echo ""
+    if [[ "$OVERWRITE" =~ ^[Yy]$ ]]; then
+      cp "$HARNESS_DIR/boundaries/presets/$PRESET.json" "$TARGET/.harness/codex-harness/boundaries.local.json"
+      success "Overwritten with $PRESET preset"
+    else
+      info "Kept existing settings"
+    fi
+  fi
+fi
+
+# ─── Step 8: Install Ouroboros command and persona references ─────
+header "Step 8: Installing Ouroboros command and persona references"
+
+COMMANDS_TARGET="$TARGET/.harness/codex-harness/commands"
+mkdir -p "$COMMANDS_TARGET"
+cmd_count=0
+for cmd in "$HARNESS_DIR/commands/"*.md; do
+  [ -f "$cmd" ] || continue
+  cp "$cmd" "$COMMANDS_TARGET/"
+  cmd_count=$((cmd_count + 1))
+done
+if [ "$cmd_count" -eq 0 ]; then
+  warn "No command files found in $HARNESS_DIR/commands/"
+else
+  success "Installed $cmd_count workflow command references"
+fi
+
+AGENTS_TARGET="$TARGET/.harness/codex-harness/agents"
+mkdir -p "$AGENTS_TARGET"
+agent_count=0
+
+# Pair Mode agents (navigator, test-designer) — experimental only
+PAIR_MODE_AGENTS="navigator.md test-designer.md"
+
+for agent in "$HARNESS_DIR/agents/"*.md; do
+  [ -f "$agent" ] || continue
+  agent_basename="$(basename "$agent")"
+
+  # Skip pair mode agents if stable version
+  if [ "$VERSION" = "stable" ]; then
+    for pm_agent in $PAIR_MODE_AGENTS; do
+      if [ "$agent_basename" = "$pm_agent" ]; then
+        continue 2
+      fi
+    done
+  fi
+
+  cp "$agent" "$AGENTS_TARGET/"
+  agent_count=$((agent_count + 1))
+done
+if [ "$agent_count" -eq 0 ]; then
+  warn "No agent files found in $HARNESS_DIR/agents/"
+else
+  success "Installed $agent_count persona references"
+  if [ "$VERSION" = "experimental" ]; then
+    info "  Includes Pair Mode agents: navigator, test-designer"
+  fi
+fi
+
+# Copy topology.yaml if exists
+if [ -f "$HARNESS_DIR/agents/topology.yaml" ]; then
+  cp "$HARNESS_DIR/agents/topology.yaml" "$AGENTS_TARGET/"
+  success "Installed agent orchestration topology"
+fi
+
+# Install Ouroboros templates (seeds/interviews/evaluations dirs are created lazily by commands)
+if [ -d "$HARNESS_DIR/ouroboros/templates" ]; then
+  mkdir -p "$TARGET/.harness/ouroboros/templates"
+  cp "$HARNESS_DIR/ouroboros/templates/"* "$TARGET/.harness/ouroboros/templates/" 2>/dev/null || true
+fi
+if [ -d "$HARNESS_DIR/ouroboros/scoring" ]; then
+  mkdir -p "$TARGET/.harness/ouroboros/scoring"
+  cp "$HARNESS_DIR/ouroboros/scoring/"* "$TARGET/.harness/ouroboros/scoring/" 2>/dev/null || true
+fi
+success "Ouroboros templates installed"
+
+# Install Runtime Trace tools (observability only)
+if [ -d "$HARNESS_DIR/trace" ]; then
+  mkdir -p "$TARGET/.harness/trace"
+  cp "$HARNESS_DIR/trace/"* "$TARGET/.harness/trace/" 2>/dev/null || true
+  chmod +x "$TARGET/.harness/trace/"*.sh 2>/dev/null || true
+  chmod +x "$TARGET/.harness/trace/"*.py 2>/dev/null || true
+  success "Runtime Trace tools installed"
+fi
+
+# Install terminal wrapper for Warp/terminal workflows.
+if [ -f "$HARNESS_DIR/bin/harness" ]; then
+  mkdir -p "$TARGET/.harness/bin"
+  cp "$HARNESS_DIR/bin/harness" "$TARGET/.harness/bin/harness"
+  chmod +x "$TARGET/.harness/bin/harness"
+  success "Terminal wrapper installed: .harness/bin/harness"
+fi
+
+# Install replay-test runner scaffold (testing only; does not alter workflow)
+if [ -d "$HARNESS_DIR/tests/replay" ]; then
+  mkdir -p "$TARGET/tests/replay"
+  mkdir -p "$TARGET/tests/fixtures/interview" "$TARGET/tests/fixtures/seed" "$TARGET/tests/fixtures/trd" "$TARGET/tests/fixtures/decompose" "$TARGET/tests/fixtures/run_outputs"
+  mkdir -p "$TARGET/tests/expected/traces" "$TARGET/tests/expected/outputs" "$TARGET/tests/expected/interview"
+  mkdir -p "$TARGET/tests/cases"
+  cp "$HARNESS_DIR/tests/replay/"*.py "$TARGET/tests/replay/" 2>/dev/null || true
+  chmod +x "$TARGET/tests/replay/replay_runner.py" 2>/dev/null || true
+  success "Replay Test scaffold installed"
+fi
+
+# ─── Step 8.5: Install methodology plugin system ─────────────────
+header "Step 8.5: Installing methodology plugin system"
+
+METHOD_DISPATCH_TARGET="$TARGET/.harness/methodology"
+METHOD_PLUGINS_TARGET="$TARGET/.harness/methodologies"
+METHOD_LIB_TARGET="$TARGET/.harness/lib"
+
+mkdir -p "$METHOD_DISPATCH_TARGET/_schema"
+mkdir -p "$METHOD_PLUGINS_TARGET"
+mkdir -p "$METHOD_LIB_TARGET"
+
+# Copy dispatcher artifacts (registry, schema, state template, README)
+if [ -d "$HARNESS_DIR/methodology" ]; then
+  cp -R "$HARNESS_DIR/methodology/_schema/"* "$METHOD_DISPATCH_TARGET/_schema/" 2>/dev/null || true
+  cp "$HARNESS_DIR/methodology/_registry.yaml" "$METHOD_DISPATCH_TARGET/" 2>/dev/null || true
+  cp "$HARNESS_DIR/methodology/README.md" "$METHOD_DISPATCH_TARGET/" 2>/dev/null || true
+  # Initialize state from template if it doesn't exist yet
+  if [ ! -f "$METHOD_DISPATCH_TARGET/_state.yaml" ]; then
+    cp "$HARNESS_DIR/methodology/_state.template.yaml" "$METHOD_DISPATCH_TARGET/_state.yaml" 2>/dev/null || true
+  fi
+  success "Methodology dispatcher installed"
+else
+  warn "methodology/ source not found — skipping plugin system"
+fi
+
+# Copy dispatcher library
+if [ -f "$HARNESS_DIR/lib/methodology.sh" ]; then
+  cp "$HARNESS_DIR/lib/methodology.sh" "$METHOD_LIB_TARGET/"
+  chmod +x "$METHOD_LIB_TARGET/methodology.sh" 2>/dev/null || true
+  if [ -f "$HARNESS_DIR/lib/colors.sh" ]; then
+    cp "$HARNESS_DIR/lib/colors.sh" "$METHOD_LIB_TARGET/"
+  fi
+fi
+
+# ─── Methodology selection ────────────────────────────────────────
+# Catalog: "name:category:description"  (order = display order)
+METHODOLOGY_CATALOG=(
+  "ouroboros:0→1/1→N:Spec-first development (default ★)"
+  "living-spec:0→1/1→N:Living specification"
+  "parallel-change:0→1/1→N:Parallel Change Pattern"
+  "bmad-lite:0→1/1→N:Multi-agent workflow (BMAD)"
+  "lean-mvp:0→1/1→N:MVP 가설 검증"
+  "ddd-lite:0→1/1→N:Domain-Driven Design [blocking gate]"
+  "shape-up:0→1/1→N:Basecamp Shape Up"
+  "bdd:모든 단계:Behavior-Driven Development"
+  "tdd-strict:모든 단계:TDD strict cycle"
+  "exploration:모든 단계:Spike & Explore"
+  "rfc-driven:모든 단계:RFC-first decisions"
+  "threat-model-lite:모든 단계:Threat modeling"
+  "strangler-fig:운영/시스템:Incremental migration"
+  "incident-review:운영/시스템:Post-incident review"
+  "observability-first:운영/시스템:Observability-first"
+  "mikado-method:리팩터링:Dependency-first refactor"
+)
+
+# Build ordered name list from catalog
+ALL_METHODOLOGY_NAMES=()
+for entry in "${METHODOLOGY_CATALOG[@]}"; do
+  ALL_METHODOLOGY_NAMES+=("$(echo "$entry" | cut -d: -f1)")
+done
+
+# Populates global SELECTED_METHODS array; returns 1 on unknown name.
+_select_methodologies() {
+  local arg="$1"
+  local valid_names=" ${ALL_METHODOLOGY_NAMES[*]} "
+  SELECTED_METHODS=()
+  if [ "$arg" = "all" ]; then
+    SELECTED_METHODS=("${ALL_METHODOLOGY_NAMES[@]}")
+    return 0
+  fi
+  if [ "$arg" = "none" ]; then
+    return 0
+  fi
+  IFS=',' read -ra requested <<< "$arg"
+  for name in "${requested[@]}"; do
+    name="$(echo "$name" | tr -d ' ')"
+    if [[ "$valid_names" != *" $name "* ]]; then
+      error "Unknown methodology: '$name'"
+      error "Valid names: ${ALL_METHODOLOGY_NAMES[*]}"
+      return 1
+    fi
+    SELECTED_METHODS+=("$name")
+  done
+  return 0
+}
+
+SELECTED_METHODS=()
+
+if [ -n "$METHODOLOGY_ARG" ]; then
+  # CLI flag provided — resolve immediately
+  _select_methodologies "$METHODOLOGY_ARG" || exit 1
+elif [ "$AUTO_YES" -eq 1 ]; then
+  # --yes mode — install all
+  SELECTED_METHODS=("${ALL_METHODOLOGY_NAMES[@]}")
+else
+  # Interactive selection
+  echo ""
+  echo "  16 methodologies available. Choose which ones to install."
+  echo "  (ouroboros is the default; others activate via /methodology use <name>)"
+  echo ""
+
+  idx=1
+  prev_category=""
+  for entry in "${METHODOLOGY_CATALOG[@]}"; do
+    name="$(echo "$entry" | cut -d: -f1)"
+    category="$(echo "$entry" | cut -d: -f2)"
+    desc="$(echo "$entry" | cut -d: -f3-)"
+    if [ "$category" != "$prev_category" ]; then
+      echo "  ${BOLD}${category}${NC}"
+      prev_category="$category"
+    fi
+    printf "    [%2d] %-22s %s\n" "$idx" "$name" "$desc"
+    idx=$((idx + 1))
+  done
+
+  echo ""
+  echo "  'all'  — install all 16 (recommended for new projects)"
+  echo "  'none' — skip plugins (install dispatcher only)"
+  echo "  or comma-separated numbers, e.g. 1,7,8"
+  echo ""
+  read -p "  Select [all]: " -r METHOD_CHOICE
+  echo ""
+
+  METHOD_CHOICE="${METHOD_CHOICE:-all}"
+
+  if [ "$METHOD_CHOICE" = "all" ]; then
+    SELECTED_METHODS=("${ALL_METHODOLOGY_NAMES[@]}")
+  elif [ "$METHOD_CHOICE" = "none" ]; then
+    SELECTED_METHODS=()
+  else
+    # Parse comma-separated numbers
+    IFS=',' read -ra choices <<< "$METHOD_CHOICE"
+    total_catalog="${#METHODOLOGY_CATALOG[@]}"
+    for choice in "${choices[@]}"; do
+      choice="$(echo "$choice" | tr -d ' ')"
+      if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "$total_catalog" ]; then
+        error "Invalid selection: '$choice' (must be 1-$total_catalog)"
+        exit 1
+      fi
+      entry="${METHODOLOGY_CATALOG[$((choice - 1))]}"
+      SELECTED_METHODS+=("$(echo "$entry" | cut -d: -f1)")
+    done
+  fi
+fi
+
+# ─── Install selected plugins ─────────────────────────────────────
+# Always start clean so a partial/previous install doesn't leave stale plugins
+rm -rf "$METHOD_PLUGINS_TARGET"
+mkdir -p "$METHOD_PLUGINS_TARGET"
+
+plugin_count=0
+if [ -d "$HARNESS_DIR/methodologies" ]; then
+  for plugin_name in "${SELECTED_METHODS[@]}"; do
+    plugin_dir="$HARNESS_DIR/methodologies/$plugin_name/"
+    if [ ! -d "$plugin_dir" ]; then
+      warn "Methodology directory not found, skipping: $plugin_name"
+      continue
+    fi
+    # Copy methodology directory as a whole (preserving its name)
+    rm -rf "$METHOD_PLUGINS_TARGET/$plugin_name"
+    cp -R "$plugin_dir" "$METHOD_PLUGINS_TARGET/$plugin_name"
+
+    # If methodology bundles its own slash commands, install them
+    if [ -d "$plugin_dir/commands" ]; then
+      for cmd in "$plugin_dir/commands/"*.md; do
+        [ -f "$cmd" ] || continue
+        cp "$cmd" "$TARGET/.harness/codex-harness/commands/"
+      done
+    fi
+    # If methodology bundles personas, install them as agents
+    if [ -d "$plugin_dir/personas" ]; then
+      for persona in "$plugin_dir/personas/"*.md; do
+        [ -f "$persona" ] || continue
+        cp "$persona" "$TARGET/.harness/codex-harness/agents/"
+      done
+    fi
+    plugin_count=$((plugin_count + 1))
+  done
+fi
+
+if [ "$plugin_count" -eq 0 ] && [ "${#SELECTED_METHODS[@]}" -eq 0 ]; then
+  info "No methodology plugins installed (dispatcher only)"
+elif [ "$plugin_count" -gt 0 ]; then
+  success "Installed $plugin_count methodology plugin(s): ${SELECTED_METHODS[*]}"
+fi
+
+# ─── Step 9: Copy gate rules ──────────────────────────────────────
+header "Step 9: Installing CI/CD gates & spec gate"
+
+HARNESS_TARGET="$TARGET/.harness"
+mkdir -p "$HARNESS_TARGET/gates/rules"
+mkdir -p "$HARNESS_TARGET/hooks"
+
+# Copy gate scripts (default tier only — opt-in gates installed on demand via GATES.md)
+gate_files=(
+  "gates/check-boundaries.sh"
+  "gates/check-layers.sh"
+  "gates/check-secrets.sh"
+  "gates/check-security.sh"
+  "gates/check-structure.sh"
+  "gates/check-spec.sh"
+  "gates/check-deps.sh"
+)
+for gf in "${gate_files[@]}"; do
+  if [ -f "$HARNESS_DIR/$gf" ]; then
+    cp "$HARNESS_DIR/$gf" "$HARNESS_TARGET/gates/"
+  else
+    warn "Missing gate file: $gf"
+  fi
+done
+
+for rf in "gates/rules/boundaries.yaml" "gates/rules/structure.yaml"; do
+  if [ -f "$HARNESS_DIR/$rf" ]; then
+    cp "$HARNESS_DIR/$rf" "$HARNESS_TARGET/gates/rules/"
+  else
+    warn "Missing rule file: $rf"
+  fi
+done
+
+# Copy gate documentation (default vs opt-in tiers)
+if [ -f "$HARNESS_DIR/gates/GATES.md" ]; then
+  cp "$HARNESS_DIR/gates/GATES.md" "$HARNESS_TARGET/gates/"
+fi
+# Install opt-in gates if requested
+if [ -n "$EXTRA_GATES" ]; then
+  IFS=',' read -ra GATE_LIST <<< "$EXTRA_GATES"
+  for gate_name in "${GATE_LIST[@]}"; do
+    gate_name=$(echo "$gate_name" | tr -d ' ' | sed 's/^+//')
+    gate_file="gates/check-${gate_name}.sh"
+    if [ -f "$HARNESS_DIR/$gate_file" ]; then
+      cp "$HARNESS_DIR/$gate_file" "$HARNESS_TARGET/gates/"
+      step "Installed opt-in gate: check-${gate_name}.sh"
+      # security-ai gate: also copy the security/ helper directory
+      if [ "$gate_name" = "security-ai" ] && [ -d "$HARNESS_DIR/security" ]; then
+        mkdir -p "$HARNESS_TARGET/security"
+        cp "$HARNESS_DIR/security/"* "$HARNESS_TARGET/security/" 2>/dev/null || true
+        chmod +x "$HARNESS_TARGET/security/dismiss-finding.sh" 2>/dev/null || true
+        step "Installed .harness/security/ (findings tracker + dismiss helper)"
+      fi
+    else
+      warn "Unknown gate: '${gate_name}'. Available opt-in gates: complexity, mutation, performance, ai-antipatterns, security-ai"
+    fi
+  done
+fi
+
+chmod +x "$HARNESS_TARGET/gates/"*.sh 2>/dev/null || true
+
+# Copy hooks
+for hf in "boundaries/hooks/post-edit-lint.sh" "boundaries/hooks/pre-commit-gate.sh"; do
+  if [ -f "$HARNESS_DIR/$hf" ]; then
+    cp "$HARNESS_DIR/$hf" "$HARNESS_TARGET/hooks/"
+  else
+    warn "Missing hook file: $hf"
+  fi
+done
+chmod +x "$HARNESS_TARGET/hooks/"*.sh 2>/dev/null || true
+
+# Copy feedback tools
+if [ -f "$HARNESS_DIR/feedback/detect-violations.sh" ]; then
+  cp "$HARNESS_DIR/feedback/detect-violations.sh" "$HARNESS_TARGET/"
+  chmod +x "$HARNESS_TARGET/detect-violations.sh"
+else
+  warn "Missing feedback tool: detect-violations.sh"
+fi
+
+success "Installed gates and hooks to .harness/"
+
+# ─── Step 10: Install pre-commit hook ─────────────────────────────
+header "Step 10: Installing pre-commit hook"
+
+if [ "$SKIP_HOOKS" -eq 1 ]; then
+  info "Skipped (--no-hooks)"
+elif [ -d "$TARGET/.git" ]; then
+  "$HARNESS_DIR/gates/install-hooks.sh" "$TARGET"
+  success "Pre-commit hook installed"
+else
+  warn "Not a git repository. Pre-commit hook skipped."
+  info "Run 'git init' then '$HARNESS_DIR/gates/install-hooks.sh $TARGET' to install later."
+fi
+
+# ─── Step 11: Install GitHub Actions workflow (optional) ─────────
+header "Step 11: GitHub Actions CI"
+
+if [ "$SKIP_CI" -eq 1 ]; then
+  info "Skipped (--no-ci)"
+elif [ -f "$HARNESS_DIR/templates/github-actions-gates.yaml" ]; then
+  if [ "$AUTO_YES" -eq 1 ]; then
+    INSTALL_GHA="y"
+  else
+    read -p "Install GitHub Actions workflow for gates? [y/N] " -n 1 -r INSTALL_GHA
+    echo ""
+  fi
+  if [[ "$INSTALL_GHA" =~ ^[Yy]$ ]]; then
+    mkdir -p "$TARGET/.github/workflows"
+    cp "$HARNESS_DIR/templates/github-actions-gates.yaml" "$TARGET/.github/workflows/harness-gates.yaml"
+    success "Installed .github/workflows/harness-gates.yaml"
+  else
+    info "Skipped GitHub Actions setup"
+  fi
+else
+  warn "GitHub Actions template not found, skipping"
+fi
+
+# ─── Step 12: Update .gitignore ────────────────────────────────────
+header "Step 12: Updating .gitignore"
+
+GITIGNORE="$TARGET/.gitignore"
+ENTRIES=(".env" ".env.local" ".env.*.local" ".review-artifacts/" ".harness/ouroboros/session.db")
+
+touch "$GITIGNORE"
+for entry in "${ENTRIES[@]}"; do
+  if ! grep -qxF "$entry" "$GITIGNORE"; then
+    echo "$entry" >> "$GITIGNORE"
+    step "Added: $entry"
+  fi
+done
+success ".gitignore updated"
+
+# ─── Step 13: Pair Mode configuration ────────────────────────────
+if [ "$VERSION" = "experimental" ] && [ "$PAIR_MODE" != "off" ]; then
+  header "Step 13: Pair Mode configuration"
+  PAIR_ENV_FILE="$TARGET/.env.local"
+  touch "$PAIR_ENV_FILE"
+  if ! grep -q "HARNESS_PAIR_MODE" "$PAIR_ENV_FILE" 2>/dev/null; then
+    echo "HARNESS_PAIR_MODE=$PAIR_MODE" >> "$PAIR_ENV_FILE"
+  fi
+  if [ "$PAIR_MODE" = "on" ]; then
+    if ! grep -q "HARNESS_ENABLE_PAIR_MODE" "$PAIR_ENV_FILE" 2>/dev/null; then
+      echo "HARNESS_ENABLE_PAIR_MODE=1" >> "$PAIR_ENV_FILE"
+    fi
+  fi
+  success "Pair Mode: $PAIR_MODE"
+fi
+
+# ─── Done ──────────────────────────────────────────────────────────
+header "Installation Complete"
+echo ""
+echo "  Configuration:"
+echo "    Version:     $VERSION"
+echo "    Track:       Lite"
+echo "    Preset:      $PRESET"
+if [ "$plugin_count" -eq 0 ]; then
+  echo "    Methodologies: (none — dispatcher only)"
+elif [ "$plugin_count" -eq "${#ALL_METHODOLOGY_NAMES[@]}" ]; then
+  echo "    Methodologies: all ($plugin_count)"
+else
+  echo "    Methodologies: $plugin_count selected — ${SELECTED_METHODS[*]}"
+fi
+if [ "$VERSION" = "experimental" ]; then
+  echo "    Pair Mode:   $PAIR_MODE"
+fi
+echo ""
+echo "  Files created:"
+echo "    AGENTS.md                       - AI agent context file"
+echo "    ARCHITECTURE_INVARIANTS.md      - Architecture rules"
+echo "    docs/code-convention.yaml       - Coding conventions"
+echo "    docs/adr.yaml                   - Architecture Decision Records"
+echo "    .harness/codex-harness/boundaries.local.json     - Codex permissions ($PRESET)"
+echo "    .harness/codex-harness/commands/               - Ouroboros workflow command references"
+echo "    .harness/codex-harness/agents/                 - $agent_count persona references"
+echo "    .harness/bin/harness             - Terminal/Warp wrapper"
+echo "    .harness/                       - Gates, hooks, tools, and Ouroboros workspace"
+echo ""
+echo "  Ouroboros Workflow:"
+echo "    /interview 'topic'  → Socratic interview (clarify requirements)"
+echo "    /seed               → Generate immutable spec"
+echo "    /run                → Execute Double Diamond"
+echo "    /evaluate           → 3-stage verification"
+echo "    /evolve             → Evolution loop"
+echo ""
+if [ "$VERSION" = "experimental" ] && [ "$PAIR_MODE" != "off" ]; then
+  echo "  Pair Mode:"
+  echo "    /seed에서 AC에 complexity: medium|high를 지정하면"
+  echo "    /run 시 Navigator-Driver 패턴이 자동 활성화됩니다."
+  echo ""
+fi
+echo "  Next steps:"
+echo "    1. Edit AGENTS.md to add project-specific rules"
+echo "    2. Edit ARCHITECTURE_INVARIANTS.md to define your invariants"
+echo "    3. Try .harness/bin/harness interview 'feature description'"
+echo ""
+success "Harness installed successfully!"

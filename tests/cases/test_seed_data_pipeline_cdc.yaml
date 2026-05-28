@@ -1,0 +1,17 @@
+test_id: TEST-SEED-DP-CDC-001
+target_step: /seed
+case: data_pipeline_cdc
+input_fixtures:
+  - tests/fixtures/interview/banking_message_customer_inquiry_turns.yaml
+actual_output: tests/expected/outputs/seed_data_pipeline_cdc.md
+expected_trace:
+  must_include_rule_ids:
+    - RULE-SEED-001
+  must_not_include_rule_ids: []
+expected_output:
+  must_include:
+    - acceptance_criteria
+    - constraints
+  must_not_include:
+    - TODO
+    - TBD

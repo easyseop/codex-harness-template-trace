@@ -1,0 +1,69 @@
+{
+  "policy_schema_version": "1.0",
+  "description": "Step-level required loaded policy. Only files already selected by record-runtime-trace.sh are forced; policy paths that are not selected are reported but not required.",
+  "default": {
+    "required_loaded_selected_groups": [
+      "command"
+    ],
+    "required_loaded_selected_paths": []
+  },
+  "steps": {
+    "interview": {
+      "required_loaded_selected_groups": [
+        "command"
+      ],
+      "required_loaded_selected_paths": [
+        ".harness/ouroboros/scoring/ambiguity-checklist.yaml"
+      ]
+    },
+    "seed": {
+      "required_loaded_selected_groups": [
+        "command"
+      ],
+      "required_loaded_selected_paths": [
+        ".harness/ouroboros/templates/seed-spec.yaml"
+      ]
+    },
+    "trd": {
+      "required_loaded_selected_groups": [
+        "command"
+      ],
+      "required_loaded_selected_paths": [
+        "ARCHITECTURE_INVARIANTS.md"
+      ]
+    },
+    "decompose": {
+      "required_loaded_selected_groups": [
+        "command"
+      ],
+      "required_loaded_selected_paths": [
+        "docs/TRD.md"
+      ]
+    },
+    "run": {
+      "required_loaded_selected_groups": [
+        "command"
+      ],
+      "required_loaded_selected_paths": [
+        "ARCHITECTURE_INVARIANTS.md",
+        "docs/TRD.md"
+      ]
+    },
+    "evaluate": {
+      "required_loaded_selected_groups": [
+        "command"
+      ],
+      "required_loaded_selected_paths": [
+        ".harness/gates/GATES.md",
+        ".harness/gates/rules/boundaries.yaml",
+        ".harness/gates/rules/structure.yaml"
+      ]
+    },
+    "evolve": {
+      "required_loaded_selected_groups": [
+        "command"
+      ],
+      "required_loaded_selected_paths": []
+    }
+  }
+}

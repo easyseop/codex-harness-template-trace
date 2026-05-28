@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Review artifacts (from code review plugin)
+.review-artifacts/
+
+# Local Claude Code settings (user-specific)
+.claude/settings.local.json
+
+# Ouroboros runtime data (Pro)
+.harness/ouroboros/session.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test outputs
+/tmp/
+__pycache__/
+*.pyc

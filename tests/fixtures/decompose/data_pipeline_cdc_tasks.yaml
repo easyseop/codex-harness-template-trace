@@ -1,0 +1,11 @@
+decomposition:
+  seed_ref: "data_pipeline_cdc_seed.yaml"
+  tasks:
+    - id: "T-001"
+      ac_ref: "AC-001"
+      layer: "data"
+      description: "Raw CDC 적재"
+    - id: "T-002"
+      ac_ref: "AC-002"
+      layer: "logic"
+      description: "Quality validation"

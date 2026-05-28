@@ -1,0 +1,25 @@
+test_id: TEST-DECOMP-DP-CDC-001
+target_step: /decompose
+case: data_pipeline_cdc
+input_fixtures:
+  - tests/fixtures/seed/data_pipeline_cdc_seed.yaml
+  - tests/fixtures/trd/data_pipeline_cdc_trd.md
+actual_trace: tests/expected/traces/decompose_data_pipeline_cdc.json
+actual_output: tests/expected/outputs/decompose_data_pipeline_cdc.md
+expected_trace:
+  must_include_rule_ids:
+    - RULE-DECOMP-DP-001
+    - RULE-DP-001
+    - RULE-DP-003
+    - RULE-DP-CDC-001
+  must_not_include_rule_ids: []
+expected_output:
+  must_include:
+    - CDC 변경순서 기준 확인
+    - Raw CDC 적재
+    - CDC sequence 기준 정렬 검증
+    - Quality validation
+    - Serving mart 생성
+  must_not_include:
+    - Source에서 Mart 직접 생성
+    - Quality 검증 없는 Serving 적재

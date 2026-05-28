@@ -1,0 +1,16 @@
+test_id: TEST-EVAL-DP-MISSING-QUALITY-001
+target_step: /evaluate
+case: data_pipeline_missing_quality
+input_fixtures:
+  - tests/fixtures/run_outputs/data_pipeline_missing_quality.md
+actual_trace: tests/expected/traces/evaluate_data_pipeline_missing_quality.json
+actual_output: tests/expected/outputs/evaluate_data_pipeline_missing_quality.md
+expected_trace:
+  must_include_rule_ids:
+    - RULE-EVAL-001
+    - RULE-DP-003
+expected_result:
+  status: FAIL
+expected_fail_reasons:
+  - Quality validation 단계 없음
+  - Serving 적재 전 DQ 검증 누락

@@ -1,0 +1,39 @@
+{
+  "name": "codex-harness",
+  "version": "0.1.0",
+  "description": "Specification-first Codex harness with Ouroboros workflow, trace evidence, replay tests, gates, and methodology plugins.",
+  "author": {
+    "name": "easyseop",
+    "url": "https://github.com/easyseop"
+  },
+  "homepage": "https://github.com/easyseop/codex-harness-template-trace",
+  "repository": "https://github.com/easyseop/codex-harness-template-trace",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "harness",
+    "ouroboros",
+    "specification-first",
+    "trace",
+    "replay-test",
+    "guardrails"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Harness",
+    "shortDescription": "Spec-first workflow, trace evidence, replay tests, and gates for Codex.",
+    "longDescription": "Codex Harness ports the AI Harness Template to Codex while preserving the Ouroboros workflow, Rule ID evidence model, runtime trace, replay tests, architecture gates, and methodology plugin system.",
+    "developerName": "easyseop",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write",
+      "Review"
+    ],
+    "defaultPrompt": [
+      "Start an Ouroboros interview for this feature.",
+      "Run the Codex harness workflow for this spec.",
+      "Evaluate this implementation against the seed spec."
+    ]
+  }
+}

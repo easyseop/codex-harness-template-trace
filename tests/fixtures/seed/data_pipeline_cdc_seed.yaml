@@ -1,0 +1,20 @@
+version: 1
+goal:
+  summary: "Build a CDC-based data pipeline from source changes to serving marts."
+constraints:
+  must:
+    - "Preserve CDC change ordering."
+    - "Run quality validation before serving load."
+  must_not:
+    - "Create serving mart directly from source without raw CDC storage."
+acceptance_criteria:
+  - id: "AC-001"
+    description: "Raw CDC changes are stored before downstream transformations."
+    verification: "automated"
+    priority: "must"
+    complexity: "medium"
+  - id: "AC-002"
+    description: "Serving mart load is blocked when quality validation fails."
+    verification: "automated"
+    priority: "must"
+    complexity: "medium"

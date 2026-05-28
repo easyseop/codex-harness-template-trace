@@ -1,0 +1,14 @@
+test_id: TEST-INTERVIEW-BANKING-002
+target_step: /interview
+case: banking_message_customer_inquiry_multi_turn
+input_fixtures:
+  - tests/fixtures/interview/banking_message_customer_inquiry_turns.yaml
+actual_output: tests/expected/interview/banking_message_customer_inquiry_single_turn.md
+expected_request_type: requirements-clarification
+ambiguity_score_lte: "0.2"
+expected_output:
+  must_include:
+    - RULE-INTERVIEW-001
+    - 개인정보를 저장하거나 로그에 남겨도 되나요?
+  must_not_include:
+    - 데이터베이스 스키마를 만들겠습니다

@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-05-19T00:00:00Z",
+  "workflow_step": "decompose",
+  "request_type": "task-decomposition",
+  "selected_command_files": ["commands/decompose.md"],
+  "selected_reference_files": [
+    "tests/fixtures/seed/data_pipeline_cdc_seed.yaml",
+    "tests/fixtures/trd/data_pipeline_cdc_trd.md"
+  ],
+  "selected_agent_files": [],
+  "loaded_rule_ids": [
+    "RULE-DECOMP-001",
+    "RULE-DECOMP-DP-001",
+    "RULE-DP-001",
+    "RULE-DP-003",
+    "RULE-DP-CDC-001"
+  ],
+  "rule_source_paths": ["commands/decompose.md"],
+  "trace_id": "trace-replay-decompose-data-pipeline-cdc",
+  "user_request_summary": "Replay decompose for CDC data pipeline"
+}
