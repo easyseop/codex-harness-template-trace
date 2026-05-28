@@ -37,7 +37,7 @@ ARCHITECTURE_INVARIANTS.md
 
 ## Warp/터미널에서 사용하기
 
-이 포트는 Warp 같은 터미널에서 쓰기 쉽도록 `.harness/bin/harness` 래퍼를 설치합니다.
+이 포트는 Warp, 일반 터미널, VSCode 터미널에서 바로 쓰기 쉽도록 `.harness/bin/harness` 래퍼를 설치합니다. 별도 OpenAI API key를 직접 넣는 방식이 아니라, 로컬에 로그인된 `codex` CLI 세션을 사용합니다.
 
 ```bash
 cd /path/to/your-project
@@ -57,7 +57,39 @@ export PATH="$PWD/.harness/bin:$PATH"
 harness interview "팀 과금 기능 추가"
 ```
 
-중요한 점: `harness interview`는 일반 쉘이 직접 요구사항을 분석하는 실행기가 아닙니다. 설치된 command reference를 기준으로 **Codex에게 보낼 실행 프롬프트를 준비**합니다. Warp AI나 Codex에 출력된 프롬프트를 보내면 Codex가 해당 단계의 지시문을 읽고 작업합니다.
+기본 실행은 Codex interactive TUI를 엽니다.
+
+```bash
+harness interview "팀 과금 기능 추가"
+```
+
+자동화나 CI처럼 비대화형으로 돌리고 싶으면 `codex exec`를 사용하는 `--exec` 모드를 씁니다.
+
+```bash
+harness --exec seed
+harness --exec run
+```
+
+프롬프트만 보고 싶거나 Warp AI에 직접 붙여넣고 싶으면 `--print`를 씁니다.
+
+```bash
+harness --print interview "팀 과금 기능 추가"
+```
+
+모델과 샌드박스는 필요할 때 넘길 수 있습니다.
+
+```bash
+harness --model <model> --sandbox workspace-write run
+HARNESS_MODEL=<model> harness evaluate
+```
+
+`codex` 실행 파일을 직접 지정해야 하는 환경이면 `HARNESS_CODEX_BIN`을 사용하세요.
+
+```bash
+HARNESS_CODEX_BIN="$HOME/.nvm/versions/node/v24.15.0/bin/codex" harness interview "요구사항"
+```
+
+래퍼는 `commands/*.md` 또는 `.harness/codex-harness/commands/*.md`를 읽어 Codex에게 “어떤 command reference와 persona를 따라야 하는지”를 전달합니다. 즉 `command.md`는 여전히 페르소나와 절차를 부여하는 핵심 지시문이고, 실행 주체만 Claude Code에서 Codex CLI로 바뀐 구조입니다.
 
 ## Codex에서 사용하기
 
@@ -89,7 +121,7 @@ Codex는 `AGENTS.md`와 `.harness/codex-harness/commands/<step>.md`를 기준으
 | `skills/codex-harness/` | Codex skill 진입점과 command/persona reference |
 | `commands/*.md` | Ouroboros workflow 단계별 지시문 원본 |
 | `agents/*.md` | Navigator, Evaluator 등 persona 원본 |
-| `bin/harness` | Warp/터미널용 프롬프트 래퍼 |
+| `bin/harness` | Warp/일반 터미널/VSCode용 Codex CLI 래퍼 |
 | `trace/` | Runtime Trace, loaded file, evidence finalizer |
 | `tests/replay/` | Replay Test runner |
 | `gates/` | 구조/보안/spec/layer gate |
